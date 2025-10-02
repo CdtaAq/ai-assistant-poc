@@ -1,16 +1,17 @@
-import React from 'react';
+import React, { useEffect, useState } from "react";
 
-export default function TranscriptPanel({ partial, finals }) {
-  return (
-    <div>
-      <h3>Transcript</h3>
-      <div style={{padding:8, border:'1px solid #eee', borderRadius:6, minHeight:200}}>
-        <div style={{color:'#999'}}>{partial}</div>
-        <hr />
-        {finals.slice().reverse().map((t, idx) => (
-          <div key={idx} style={{padding:6}}>{t}</div>
-        ))}
-      </div>
-    </div>
-  );
+export default function TranscriptPanel() {
+  const [text, setText] = useState("");
+
+  useEffect(() => {
+    function handler(e) {
+      const msg = e.detail;
+      if (msg.type === "partial_transcript") setText(msg.text);
+      if (msg.type === "final_transcript") setText(msg.text);
+    }
+    window.addEventListener("assistant-event", handler);
+    return () => window.removeEventListener("assistant-event", handler);
+  }, []);
+
+  return <div style={{ border: "1px solid gray", padding: "10px" }}>{text}</div>;
 }
