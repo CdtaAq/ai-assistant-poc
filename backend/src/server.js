@@ -1,31 +1,54 @@
-// server.js
-const Fastify = require('fastify');
-const path = require('path');
-require('dotenv').config();
+const express = require("express");
+const cors = require("cors");
+const { WebSocketServer } = require("ws");
 
-const docsRoutes = require('./routes/docs');
-const chatRoutes = require('./routes/chat');
-const { attachWSS } = require('./ws/stt-ws');
-const { attachAssistantWSS } = require('./ws/assistant-ws');
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-const fastify = Fastify({ logger: true });
+// Simple /chat/ask endpoint for Postman testing
+app.post("/chat/ask", (req, res) => {
+  const { query } = req.body;
+  // Fake response
+  res.json({
+    answer: `Answer about: ${query}`,
+    citations: [{ doc: "RefundPolicy.pdf", snippet: "Refunds take 5–7 days" }]
+  });
+});
 
-// Register routes
-fastify.register(docsRoutes);
-fastify.register(chatRoutes);
+const server = app.listen(3001, () =>
+  console.log("Backend listening on http://localhost:3001")
+);
 
-// Start server and then attach raw WebSocket server to the underlying http server
-const start = async () => {
-  try {
-    const address = await fastify.listen({ port: process.env.PORT || 3000, host: '0.0.0.0' });
-    // attach ws
-    attachWSS(fastify.server);
-    attachAssistantWSS(fastify.server);
-    fastify.log.info(`Server listening at ${address}`);
-  } catch (err) {
-    fastify.log.error(err);
-    process.exit(1);
-  }
-};
+// WebSocket server
+const wss = new WebSocketServer({ server, path: "/ws/stt" });
 
-start();
+wss.on("connection", (ws) => {
+  console.log("WS client connected");
+
+  ws.on("message", (msg) => {
+    const data = JSON.parse(msg);
+    if (data.type === "start") {
+      console.log("STT session started");
+      // simulate partial + final transcripts
+      setTimeout(() => {
+        ws.send(JSON.stringify({ type: "partial_transcript", text: "I want a ref" }));
+      }, 1000);
+      setTimeout(() => {
+        ws.send(JSON.stringify({ type: "final_transcript", text: "I want a refund for my order" }));
+        ws.send(JSON.stringify({
+          type: "assistant_events",
+          events: [
+            {
+              type: "kb_citation",
+              text: "Refunds take 5–7 days – Policy, Page 3"
+            }
+          ]
+        }));
+      }, 2500);
+    }
+    if (data.type === "stop") {
+      console.log("STT session stopped");
+    }
+  });
+});
